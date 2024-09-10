@@ -1,0 +1,366 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Shape Like a Snake</title>
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            font-family: Arial, sans-serif;
+        }
+
+        .game-container {
+            position: relative;
+            width: 100vw;
+            height: 100vh;
+            background: black;
+            animation: moveBackground 5s linear infinite;
+            overflow: hidden;
+        }
+
+        @keyframes moveBackground {
+            from {
+                background-position: 0 0;
+            }
+            to {
+                background-position: 100% 100%;
+            }
+        }
+
+        .snake-segment {
+            position: absolute;
+            width: 5vw; /* Responsive size */
+            height: 5vw; /* Responsive size */
+            background-color: #27ae60;
+            border-radius: 50%;
+        }
+
+        .coin, .bonus-coin {
+            position: absolute;
+            border-radius: 50%;
+        }
+
+        .coin {
+            width: 5vw; /* Responsive size */
+            height: 5vw; /* Responsive size */
+            background-color: gold;
+            animation: coinSpin 1.2s linear infinite;
+        }
+
+        .bonus-coin {
+            width: 7vw; /* Responsive size */
+            height: 7vw; /* Responsive size */
+            background-color: crimson;
+            animation: bonusGlow 1s linear infinite;
+        }
+
+        @keyframes bonusGlow {
+            0% {
+                box-shadow: 0 0 10px crimson, 0 0 20px crimson;
+            }
+            100% {
+                box-shadow: 0 0 30px yellow, 0 0 60px yellow;
+            }
+        }
+
+        @keyframes coinSpin {
+            0% {
+                transform: rotate(0deg);
+            }
+            100% {
+                transform: rotate(360deg);
+            }
+        }
+
+        .score {
+            position: absolute;
+            top: 5%;
+            left: 5%;
+            color: #fff;
+            font-size: 5vw; /* Responsive size */
+            padding: 1vw;
+            background-color: rgba(0, 0, 0, 0.5);
+            border-radius: 1vw;
+            transition: all 0.3s ease-in-out;
+        }
+
+        .score.highlighted {
+            background-color: rgba(255, 215, 0, 0.7);
+            box-shadow: 0px 0px 10px gold;
+        }
+
+        .celebration {
+            position: absolute;
+            width: 100vw;
+            height: 100vh;
+            background-color: rgba(255, 255, 0, 0.3);
+            animation: flashEffect 1s linear 3;
+            pointer-events: none;
+        }
+
+        @keyframes flashEffect {
+            0% {
+                opacity: 1;
+            }
+            100% {
+                opacity: 0;
+            }
+        }
+
+        .message {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-size: 10vw; /* Responsive size */
+            color: white;
+            text-shadow: 0 0 10px yellow;
+            animation: messageEffect 1.5s ease-in-out;
+        }
+
+        @keyframes messageEffect {
+            0% {
+                opacity: 0;
+            }
+            50% {
+                opacity: 1;
+            }
+            100% {
+                opacity: 0;
+            }
+        }
+
+        /* Touch controls */
+        .touch-controls {
+            position: fixed;
+            bottom: 10px;
+            left: 50%;
+            transform: translateX(-50%);
+            display: flex;
+            justify-content: space-between;
+            width: 80vw;
+            max-width: 400px;
+        }
+
+        .touch-control {
+            width: 60px;
+            height: 60px;
+            border-radius: 50%;
+            background-color: rgba(0, 0, 0, 0.7);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            color: #fff;
+            font-size: 24px;
+            cursor: pointer;
+            user-select: none;
+        }
+    </style>
+</head>
+<body>
+    <div class="game-container">
+        <div class="coin" id="coin"></div>
+        <div class="score" id="score">Score: 0</div>
+    </div>
+
+    <div class="touch-controls">
+        <div class="touch-control" id="left">←</div>
+        <div class="touch-control" id="right">→</div>
+        <div class="touch-control" id="up">↑</div>
+        <div class="touch-control" id="down">↓</div>
+    </div>
+
+    <audio id="coinSound" src="retro-coin-3-236679.mp3"></audio>
+    <audio id="bonusSound" src="coin-upaif-14631.mp3"></audio>
+
+    <script>
+        const gameContainer = document.querySelector('.game-container');
+        const coin = document.getElementById('coin');
+        const scoreElement = document.getElementById('score');
+        const coinSound = document.getElementById('coinSound');
+        const bonusSound = document.getElementById('bonusSound');
+
+        let posX = window.innerWidth / 2;
+        let posY = window.innerHeight / 2;
+        let snakeLength = 5;
+        let snakeSegments = [];
+        let score = 0;
+        let velocityX = 0;
+        let velocityY = 0;
+        let snakeSpeed = isMobile() ? 1 : 0.5; // Increased speed for mobile
+        let bonusCoin = null;
+
+        function isMobile() {
+            return /Mobi|Android/i.test(navigator.userAgent);
+        }
+
+        function createSnakeSegment() {
+            const segment = document.createElement('div');
+            segment.classList.add('snake-segment');
+            gameContainer.appendChild(segment);
+            snakeSegments.push({ element: segment, x: posX, y: posY });
+        }
+
+        for (let i = 0; i < snakeLength; i++) {
+            createSnakeSegment();
+        }
+
+        function setRandomPosition(element) {
+            const x = Math.random() * (window.innerWidth - 30);
+            const y = Math.random() * (window.innerHeight - 30);
+            element.style.left = `${x}px`;
+            element.style.top = `${y}px`;
+        }
+
+        setRandomPosition(coin);
+
+        document.addEventListener('keydown', (e) => {
+            switch (e.key) {
+                case 'ArrowUp':
+                    velocityX = 0;
+                    velocityY = -snakeSpeed;
+                    break;
+                case 'ArrowDown':
+                    velocityX = 0;
+                    velocityY = snakeSpeed;
+                    break;
+                case 'ArrowLeft':
+                    velocityX = -snakeSpeed;
+                    velocityY = 0;
+                    break;
+                case 'ArrowRight':
+                    velocityX = snakeSpeed;
+                    velocityY = 0;
+                    break;
+            }
+        });
+
+        function checkCollision() {
+            const snakeHead = snakeSegments[0].element.getBoundingClientRect();
+            const coinRect = coin.getBoundingClientRect();
+
+            if (
+                snakeHead.x < coinRect.x + coinRect.width &&
+                snakeHead.x + snakeHead.width > coinRect.x &&
+                snakeHead.y < coinRect.y + coinRect.height &&
+                snakeHead.height + snakeHead.y > coinRect.y
+            ) {
+                score += 1;
+                scoreElement.textContent = `Score: ${score}`;
+                scoreElement.classList.add('highlighted');
+                setTimeout(() => scoreElement.classList.remove('highlighted'), 300);
+                coinSound.play();
+
+                createSnakeSegment();
+                setRandomPosition(coin);
+
+                if (score % 20 === 0) {
+                    triggerMilestoneBonus();
+                }
+            }
+
+            if (bonusCoin) {
+                const bonusRect = bonusCoin.getBoundingClientRect();
+                if (
+                    snakeHead.x < bonusRect.x + bonusRect.width &&
+                    snakeHead.x + snakeHead.width > bonusRect.x &&
+                    snakeHead.y < bonusRect.y + bonusRect.height &&
+                    snakeHead.height + snakeHead.y > bonusRect.y
+                ) {
+                    score += 5;
+                    scoreElement.textContent = `Score: ${score}`;
+                    bonusSound.play();
+                    bonusCoin.remove();
+                    bonusCoin = null;
+                }
+            }
+        }
+
+        function handleScreenWrap() {
+            if (posX < 0) {
+                posX = window.innerWidth;
+            } else if (posX > window.innerWidth) {
+                posX = 0;
+            }
+            if (posY < 0) {
+                posY = window.innerHeight;
+            } else if (posY > window.innerHeight) {
+                posY = 0;
+            }
+        }
+
+        function triggerMilestoneBonus() {
+            bonusCoin = document.createElement('div');
+            bonusCoin.classList.add('bonus-coin');
+            gameContainer.appendChild(bonusCoin);
+            setRandomPosition(bonusCoin);
+
+            const celebration = document.createElement('div');
+            celebration.classList.add('celebration');
+            gameContainer.appendChild(celebration);
+            setTimeout(() => celebration.remove(), 1000);
+
+            const message = document.createElement('div');
+            message.classList.add('message');
+            message.textContent = `Milestone Reached! Score: ${score}`;
+            gameContainer.appendChild(message);
+            setTimeout(() => message.remove(), 1500);
+
+            snakeSpeed += 0.5;
+        }
+
+        function updateSnakePosition() {
+            posX += velocityX;
+            posY += velocityY;
+
+            handleScreenWrap();
+
+            snakeSegments[0].x = posX;
+            snakeSegments[0].y = posY;
+
+            for (let i = snakeSegments.length - 1; i > 0; i--) {
+                snakeSegments[i].x = snakeSegments[i - 1].x;
+                snakeSegments[i].y = snakeSegments[i - 1].y;
+            }
+
+            snakeSegments.forEach((segment) => {
+                segment.element.style.left = `${segment.x}px`;
+                segment.element.style.top = `${segment.y}px`;
+            });
+
+            checkCollision();
+        }
+
+        window.addEventListener('resize', () => {
+            setRandomPosition(coin);
+        });
+
+        function gameLoop() {
+            updateSnakePosition();
+            requestAnimationFrame(gameLoop);
+        }
+
+        gameLoop();
+
+        // Touch control handlers
+        document.getElementById('left').addEventListener('touchstart', () => {
+            velocityX = -snakeSpeed;
+            velocityY = 0;
+        });
+        document.getElementById('right').addEventListener('touchstart', () => {
+            velocityX = snakeSpeed;
+            velocityY = 0;
+        });
+        document.getElementById('up').addEventListener('touchstart', () => {
+            velocityX = 0;
+            velocityY = -snakeSpeed;
+        });
+        document.getElementById('down').addEventListener('touchstart', () => {
+            velocityX = 0;
+            velocityY = snakeSpeed;
+        });
+    </script>
+</body>
+</html>
